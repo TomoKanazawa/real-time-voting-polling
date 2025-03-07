@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { getPoll, vote, getPollResults, connectToVoteUpdates } from '@/services/polls';
-import { isAuthenticated, getCurrentUser } from '@/services/auth';
-import { Poll, VoteResult } from '@/types';
+import { isAuthenticated } from '@/services/auth';
+import { Poll, VoteResult, ApiErrorResponse } from '@/types';
 
-export default function PollDetail({ params }: { params: { id: string } }) {
+export default function PollDetail() {
+  const params = useParams();
+  const pollId = params.id as string;
   const [poll, setPoll] = useState<Poll | null>(null);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [anonymous, setAnonymous] = useState(false);
@@ -20,30 +22,33 @@ export default function PollDetail({ params }: { params: { id: string } }) {
   useEffect(() => {
     const fetchPoll = async () => {
       try {
-        const data = await getPoll(params.id);
+        const data = await getPoll(pollId);
         setPoll(data);
         
         // Fetch initial results
-        const resultsData = await getPollResults(params.id);
+        const resultsData = await getPollResults(pollId);
         setResults(resultsData);
-      } catch (err: any) {
-        setError(err.response?.data?.message || 'Failed to fetch poll');
+      } catch (err: unknown) {
+        const apiError = err as ApiErrorResponse;
+        setError(apiError.response?.data?.message || 'Failed to fetch poll');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchPoll();
+    if (pollId) {
+      fetchPoll();
 
-    // Connect to real-time updates
-    const disconnect = connectToVoteUpdates(params.id, (updatedResults) => {
-      setResults(updatedResults);
-    });
+      // Connect to real-time updates
+      const disconnect = connectToVoteUpdates(pollId, (updatedResults) => {
+        setResults(updatedResults);
+      });
 
-    return () => {
-      disconnect();
-    };
-  }, [params.id]);
+      return () => {
+        disconnect();
+      };
+    }
+  }, [pollId]);
 
   const handleVote = async () => {
     if (!selectedOption) {
@@ -52,7 +57,7 @@ export default function PollDetail({ params }: { params: { id: string } }) {
     }
 
     if (!isAuthenticated() && !poll?.anonymousVotingAllowed) {
-      router.push(`/auth/login?redirect=/polls/${params.id}`);
+      router.push(`/auth/login?redirect=/polls/${pollId}`);
       return;
     }
 
@@ -60,10 +65,11 @@ export default function PollDetail({ params }: { params: { id: string } }) {
     setError('');
 
     try {
-      await vote(params.id, selectedOption, anonymous);
+      await vote(pollId, selectedOption, anonymous);
       setShowResults(true);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to submit vote');
+    } catch (err: unknown) {
+      const apiError = err as ApiErrorResponse;
+      setError(apiError.response?.data?.message || 'Failed to submit vote');
     } finally {
       setVoting(false);
     }

@@ -1,5 +1,5 @@
 import api from './api';
-import { Poll, PollOption, Vote, VoteResult } from '@/types';
+import { Poll, Vote, VoteResult } from '@/types';
 
 export const getPolls = async (): Promise<Poll[]> => {
   const response = await api.get<Poll[]>('/polls');
