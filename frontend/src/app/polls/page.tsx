@@ -4,8 +4,17 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getPolls } from '@/services/polls';
 import { Poll } from '@/types';
+import AuthCheck from '@/components/AuthCheck';
 
-export default function PollsList() {
+export default function PollsListPage() {
+  return (
+    <AuthCheck>
+      <PollsList />
+    </AuthCheck>
+  );
+}
+
+function PollsList() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

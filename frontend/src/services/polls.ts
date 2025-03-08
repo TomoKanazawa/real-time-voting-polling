@@ -20,11 +20,19 @@ export interface CreatePollRequest {
   multipleChoiceAllowed: boolean;
   anonymousVotingAllowed: boolean;
   options: { text: string }[];
+  userId: string;
 }
 
 export const createPoll = async (poll: CreatePollRequest): Promise<Poll> => {
-  const response = await api.post<Poll>('/polls', poll);
-  return response.data;
+  try {
+    console.log('Sending poll creation request:', JSON.stringify(poll, null, 2));
+    const response = await api.post<Poll>('/polls', poll);
+    console.log('Poll creation response:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Poll creation error:', error.response?.data || error.message);
+    throw error;
+  }
 };
 
 export const updatePoll = async (id: string, poll: Partial<Poll>): Promise<Poll> => {
@@ -37,13 +45,27 @@ export const deletePoll = async (id: string): Promise<void> => {
 };
 
 export const vote = async (pollId: string, optionId: string, anonymous: boolean): Promise<Vote> => {
-  const response = await api.post<Vote>('/votes', { pollId, optionId, anonymous });
-  return response.data;
+  try {
+    console.log('Sending vote request:', { pollId, optionId, anonymous });
+    const response = await api.post<Vote>('/votes', { pollId, optionId, anonymous });
+    console.log('Vote response:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Vote error:', error.response?.data || error.message);
+    throw error;
+  }
 };
 
 export const getPollResults = async (pollId: string): Promise<VoteResult> => {
-  const response = await api.get<VoteResult>(`/polls/${pollId}/results`);
-  return response.data;
+  try {
+    console.log('Fetching poll results for:', pollId);
+    const response = await api.get<VoteResult>(`/polls/${pollId}/results`);
+    console.log('Poll results response:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Poll results error:', error.response?.data || error.message);
+    throw error;
+  }
 };
 
 // WebSocket connection for real-time updates
@@ -52,30 +74,48 @@ let socket: WebSocket | null = null;
 export const connectToVoteUpdates = (pollId: string, callback: (result: VoteResult) => void): () => void => {
   if (typeof window === 'undefined') return () => {};
 
-  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/api/ws';
-  socket = new WebSocket(wsUrl);
+  try {
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/api/ws';
+    console.log('Connecting to WebSocket:', wsUrl);
+    
+    socket = new WebSocket(wsUrl);
 
-  socket.onopen = () => {
-    if (socket) {
-      socket.send(JSON.stringify({ type: 'SUBSCRIBE', pollId }));
-    }
-  };
-
-  socket.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'VOTE_UPDATE' && data.pollId === pollId) {
-        callback(data.result);
+    socket.onopen = () => {
+      console.log('WebSocket connection opened');
+      if (socket) {
+        socket.send(JSON.stringify({ type: 'SUBSCRIBE', pollId }));
       }
-    } catch (error) {
-      console.error('Error parsing WebSocket message:', error);
-    }
-  };
+    };
 
-  return () => {
-    if (socket) {
-      socket.close();
-      socket = null;
-    }
-  };
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('WebSocket message received:', data);
+        if (data.type === 'VOTE_UPDATE' && data.pollId === pollId) {
+          callback(data.result);
+        }
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    };
+
+    socket.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    socket.onclose = () => {
+      console.log('WebSocket connection closed');
+    };
+
+    return () => {
+      console.log('Closing WebSocket connection');
+      if (socket) {
+        socket.close();
+        socket = null;
+      }
+    };
+  } catch (error) {
+    console.error('Error setting up WebSocket connection:', error);
+    return () => {};
+  }
 }; 

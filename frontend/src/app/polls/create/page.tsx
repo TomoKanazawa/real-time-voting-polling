@@ -1,11 +1,20 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createPoll, CreatePollRequest } from '@/services/polls';
-import { isAuthenticated } from '@/services/auth';
+import { isAuthenticated, getCurrentUser } from '@/services/auth';
+import AuthCheck from '@/components/AuthCheck';
 
-export default function CreatePoll() {
+export default function CreatePollPage() {
+  return (
+    <AuthCheck>
+      <CreatePollForm />
+    </AuthCheck>
+  );
+}
+
+function CreatePollForm() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [options, setOptions] = useState(['', '']);
@@ -17,11 +26,11 @@ export default function CreatePoll() {
   const router = useRouter();
 
   // Set default expiration date to 24 hours from now
-  useState(() => {
+  useEffect(() => {
     const date = new Date();
     date.setHours(date.getHours() + 24);
     setExpiresAt(date.toISOString().slice(0, 16));
-  });
+  }, []);
 
   const addOption = () => {
     setOptions([...options, '']);
@@ -47,8 +56,11 @@ export default function CreatePoll() {
     e.preventDefault();
     setError('');
 
-    if (!isAuthenticated()) {
-      router.push('/auth/login?redirect=/polls/create');
+    const currentUser = getCurrentUser();
+    console.log('Current user:', currentUser);
+    
+    if (!currentUser) {
+      setError('You must be logged in to create a poll');
       return;
     }
 
@@ -83,13 +95,19 @@ export default function CreatePoll() {
         active: true,
         multipleChoiceAllowed,
         anonymousVotingAllowed,
-        options: options.map(text => ({ text }))
+        options: options.map(text => ({ text: text.trim() })),
+        userId: currentUser.id
       };
 
+      console.log('Creating poll with data:', JSON.stringify(pollData, null, 2));
+      console.log('User ID type:', typeof currentUser.id);
+      
       const createdPoll = await createPoll(pollData);
+      console.log('Poll created successfully:', createdPoll);
       router.push(`/polls/${createdPoll.id}`);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create poll');
+      console.error('Error creating poll:', err);
+      setError(err.response?.data?.error || 'Failed to create poll');
       setLoading(false);
     }
   };

@@ -5,29 +5,21 @@ import { useRouter, useParams } from 'next/navigation';
 import { getPoll, vote, getPollResults, connectToVoteUpdates } from '@/services/polls';
 import { isAuthenticated } from '@/services/auth';
 import { Poll, VoteResult, ApiErrorResponse } from '@/types';
+import AuthCheck from '@/components/AuthCheck';
 
-export default function PollDetail() {
+export default function PollDetailPage() {
   const params = useParams();
-  const pollId = params.id as string;
+  const pollId = params?.id as string;
   const [poll, setPoll] = useState<Poll | null>(null);
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [anonymous, setAnonymous] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [voting, setVoting] = useState(false);
   const [error, setError] = useState('');
-  const [results, setResults] = useState<VoteResult | null>(null);
-  const [showResults, setShowResults] = useState(false);
-  const router = useRouter();
-
+  
+  // Fetch the poll first to determine if authentication is required
   useEffect(() => {
     const fetchPoll = async () => {
       try {
         const data = await getPoll(pollId);
         setPoll(data);
-        
-        // Fetch initial results
-        const resultsData = await getPollResults(pollId);
-        setResults(resultsData);
       } catch (err: unknown) {
         const apiError = err as ApiErrorResponse;
         setError(apiError.response?.data?.message || 'Failed to fetch poll');
@@ -38,42 +30,8 @@ export default function PollDetail() {
 
     if (pollId) {
       fetchPoll();
-
-      // Connect to real-time updates
-      const disconnect = connectToVoteUpdates(pollId, (updatedResults) => {
-        setResults(updatedResults);
-      });
-
-      return () => {
-        disconnect();
-      };
     }
   }, [pollId]);
-
-  const handleVote = async () => {
-    if (!selectedOption) {
-      setError('Please select an option');
-      return;
-    }
-
-    if (!isAuthenticated() && !poll?.anonymousVotingAllowed) {
-      router.push(`/auth/login?redirect=/polls/${pollId}`);
-      return;
-    }
-
-    setVoting(true);
-    setError('');
-
-    try {
-      await vote(pollId, selectedOption, anonymous);
-      setShowResults(true);
-    } catch (err: unknown) {
-      const apiError = err as ApiErrorResponse;
-      setError(apiError.response?.data?.message || 'Failed to submit vote');
-    } finally {
-      setVoting(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -98,6 +56,110 @@ export default function PollDetail() {
       </div>
     );
   }
+
+  // If anonymous voting is allowed, no need for authentication
+  if (poll.anonymousVotingAllowed) {
+    return <PollDetail poll={poll} pollId={pollId} />;
+  }
+
+  // If anonymous voting is not allowed, require authentication
+  return (
+    <AuthCheck>
+      <PollDetail poll={poll} pollId={pollId} />
+    </AuthCheck>
+  );
+}
+
+interface PollDetailProps {
+  poll: Poll;
+  pollId: string;
+}
+
+function PollDetail({ poll, pollId }: PollDetailProps) {
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [anonymous, setAnonymous] = useState(false);
+  const [voting, setVoting] = useState(false);
+  const [error, setError] = useState('');
+  const [results, setResults] = useState<VoteResult | null>(null);
+  const [showResults, setShowResults] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    // Fetch initial results
+    const fetchResults = async () => {
+      try {
+        const resultsData = await getPollResults(pollId);
+        setResults(resultsData);
+      } catch (err) {
+        console.error('Failed to fetch results:', err);
+        // Create default results if the endpoint is not available yet
+        if (!results) {
+          const defaultResults: VoteResult = {
+            pollId: pollId,
+            pollTitle: poll.title,
+            totalVotes: 0,
+            options: poll.options.map(option => ({
+              optionId: option.id,
+              optionText: option.text,
+              voteCount: 0,
+              percentage: 0
+            })),
+            timestamp: Date.now()
+          };
+          setResults(defaultResults);
+        }
+      }
+    };
+
+    fetchResults();
+
+    // Connect to real-time updates
+    try {
+      const disconnect = connectToVoteUpdates(pollId, (updatedResults) => {
+        setResults(updatedResults);
+      });
+
+      return () => {
+        disconnect();
+      };
+    } catch (err) {
+      console.error('Failed to connect to real-time updates:', err);
+      return () => {};
+    }
+  }, [pollId, poll, results]);
+
+  const handleVote = async () => {
+    if (!selectedOption) {
+      setError('Please select an option');
+      return;
+    }
+
+    if (!isAuthenticated() && !poll.anonymousVotingAllowed) {
+      router.push(`/auth/login?redirect=/polls/${pollId}`);
+      return;
+    }
+
+    setVoting(true);
+    setError('');
+
+    try {
+      await vote(pollId, selectedOption, anonymous);
+      setShowResults(true);
+      
+      // Update results after voting
+      try {
+        const resultsData = await getPollResults(pollId);
+        setResults(resultsData);
+      } catch (err) {
+        console.error('Failed to fetch updated results:', err);
+      }
+    } catch (err: unknown) {
+      const apiError = err as ApiErrorResponse;
+      setError(apiError.response?.data?.message || 'Failed to submit vote');
+    } finally {
+      setVoting(false);
+    }
+  };
 
   return (
     <div className="bg-white shadow-md rounded-lg p-6">
