@@ -1,5 +1,6 @@
 package com.voting.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -9,6 +10,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "polls")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Poll {
 
     @Id
@@ -30,11 +32,12 @@ public class Poll {
     @Column(nullable = false)
     private boolean active;
 
-    @OneToMany(mappedBy = "poll", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "poll", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<PollOption> options = new ArrayList<>();
 
     @ManyToOne
     @JoinColumn(name = "created_by")
+    @JsonIgnoreProperties({"password", "email", "createdAt", "enabled", "accountNonExpired", "accountNonLocked", "credentialsNonExpired", "authorities"})
     private User createdBy;
 
     @Column(nullable = false)

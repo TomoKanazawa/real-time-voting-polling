@@ -1,11 +1,14 @@
 package com.voting.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 
 import java.util.UUID;
 
 @Entity
 @Table(name = "poll_options")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class PollOption {
 
     @Id
@@ -17,6 +20,7 @@ public class PollOption {
 
     @ManyToOne
     @JoinColumn(name = "poll_id", nullable = false)
+    @JsonIgnore
     private Poll poll;
 
     @Column(nullable = false)
