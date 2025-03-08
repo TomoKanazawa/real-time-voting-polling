@@ -8,13 +8,21 @@ import { Poll, VoteResult, ApiErrorResponse } from '@/types';
 import AuthCheck from '@/components/AuthCheck';
 
 export default function PollDetailPage() {
+  return (
+    <AuthCheck>
+      <PollDetailContent />
+    </AuthCheck>
+  );
+}
+
+function PollDetailContent() {
   const params = useParams();
   const pollId = params?.id as string;
   const [poll, setPoll] = useState<Poll | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // Fetch the poll first to determine if authentication is required
+  // Fetch the poll
   useEffect(() => {
     const fetchPoll = async () => {
       try {
@@ -67,17 +75,7 @@ export default function PollDetailPage() {
     );
   }
 
-  // If anonymous voting is allowed, no need for authentication
-  if (poll.anonymousVotingAllowed) {
-    return <PollDetail poll={poll} pollId={pollId} />;
-  }
-
-  // If anonymous voting is not allowed, require authentication
-  return (
-    <AuthCheck>
-      <PollDetail poll={poll} pollId={pollId} />
-    </AuthCheck>
-  );
+  return <PollDetail poll={poll} pollId={pollId} />;
 }
 
 interface PollDetailProps {
@@ -142,11 +140,6 @@ function PollDetail({ poll, pollId }: PollDetailProps) {
   const handleVote = async () => {
     if (!selectedOption) {
       setError('Please select an option');
-      return;
-    }
-
-    if (!isAuthenticated() && !poll.anonymousVotingAllowed) {
-      router.push(`/auth/login?redirect=/polls/${pollId}`);
       return;
     }
 

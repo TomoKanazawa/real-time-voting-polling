@@ -1,7 +1,17 @@
+'use client';
+
 import Link from 'next/link';
 import Image from 'next/image';
+import { useEffect, useState } from 'react';
+import { isAuthenticated } from '@/services/auth';
 
 export default function Home() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  
+  useEffect(() => {
+    setIsLoggedIn(isAuthenticated());
+  }, []);
+
   return (
     <div className="animate-slide-up">
       {/* Hero Section */}
@@ -15,25 +25,50 @@ export default function Home() {
               A scalable, fault-tolerant, real-time voting and polling system designed for high performance and reliability.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-              <Link 
-                href="/polls" 
-                className="btn-primary inline-flex items-center justify-center"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" />
-                  <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
-                </svg>
-                View Active Polls
-              </Link>
-              <Link 
-                href="/polls/create" 
-                className="btn-outline inline-flex items-center justify-center"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                </svg>
-                Create New Poll
-              </Link>
+              {isLoggedIn ? (
+                <>
+                  <Link 
+                    href="/polls" 
+                    className="btn-primary inline-flex items-center justify-center"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" />
+                      <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
+                    </svg>
+                    View Active Polls
+                  </Link>
+                  <Link 
+                    href="/polls/create" 
+                    className="btn-outline inline-flex items-center justify-center"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                    </svg>
+                    Create New Poll
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link 
+                    href="/auth/login" 
+                    className="btn-primary inline-flex items-center justify-center"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
+                    </svg>
+                    Log In
+                  </Link>
+                  <Link 
+                    href="/auth/register" 
+                    className="btn-outline inline-flex items-center justify-center"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
+                    </svg>
+                    Register
+                  </Link>
+                </>
+              )}
             </div>
           </div>
           <div className="md:w-1/2 flex justify-center md:justify-end">
@@ -105,26 +140,28 @@ export default function Home() {
       </div>
 
       {/* CTA Section */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg shadow-md p-6 text-center">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Try the System</h2>
-        <p className="text-gray-600 dark:text-gray-300 mb-6 max-w-2xl mx-auto">
-          Experience the real-time voting system by creating a poll or participating in existing ones.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link 
-            href="/auth/register" 
-            className="btn-primary inline-flex items-center justify-center"
-          >
-            Register Now
-          </Link>
-          <Link 
-            href="/auth/login" 
-            className="btn-secondary inline-flex items-center justify-center"
-          >
-            Login
-          </Link>
+      {!isLoggedIn && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg shadow-md p-6 text-center">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Try the System</h2>
+          <p className="text-gray-600 dark:text-gray-300 mb-6 max-w-2xl mx-auto">
+            Experience the real-time voting system by creating a poll or participating in existing ones.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link 
+              href="/auth/register" 
+              className="btn-primary inline-flex items-center justify-center"
+            >
+              Register Now
+            </Link>
+            <Link 
+              href="/auth/login" 
+              className="btn-secondary inline-flex items-center justify-center"
+            >
+              Login
+            </Link>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
