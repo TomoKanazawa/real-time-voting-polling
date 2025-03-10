@@ -1,0 +1,41 @@
+package com.project.subscriber;
+
+import com.project.subscriber.service.SubscriberService;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.web.context.WebServerInitializedEvent;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.web.client.RestTemplate;
+
+@SpringBootApplication
+@EnableScheduling
+public class SubscriberApplication {
+
+	@Value("${server.port}")
+	private int port;
+
+	public static void main(String[] args) {
+		SpringApplication.run(SubscriberApplication.class, args);
+	}
+
+	@Bean
+	public RestTemplate restTemplate() {
+		return new RestTemplate();
+	}
+
+	@EventListener
+	public void onWebServerInitialized(WebServerInitializedEvent event) {
+		this.port = event.getWebServer().getPort();
+		System.out.println("Started application on port: " + port);
+	}
+
+	@Bean
+	public SubscriberService subscriberService(RestTemplate restTemplate) {
+		SubscriberService subscriberService = new SubscriberService(restTemplate);
+		subscriberService.setPort(port);
+		return subscriberService;
+	}
+} 
