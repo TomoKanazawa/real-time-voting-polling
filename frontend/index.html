@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Voting and Polling</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input, select {
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Real-Time Voting and Polling</h1>
+    
+    <div class="section">
+        <h2>Create a New Poll</h2>
+        <input type="text" id="newTopic" placeholder="Enter poll name">
+        <button onclick="createTopic()">Create Poll</button>
+        <div id="createTopicResult" class="results"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Available Polls</h2>
+        <button onclick="getTopics()">Refresh Polls</button>
+        <div id="topicsList" class="results">No polls available</div>
+    </div>
+    
+    <div class="section">
+        <h2>Cast Your Vote</h2>
+        <select id="topicSelect">
+            <option value="">Select a poll</option>
+        </select>
+        <input type="text" id="voteOption" placeholder="Enter your vote">
+        <button onclick="castVote()">Submit Vote</button>
+        <div id="voteResult" class="results"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Subscribe to Poll Results</h2>
+        <select id="subscribeTopicSelect">
+            <option value="">Select a poll</option>
+        </select>
+        <button onclick="subscribeToPoll()">Subscribe</button>
+        <div id="subscribeResult" class="results"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Poll Results</h2>
+        <select id="resultsTopicSelect">
+            <option value="">Select a poll</option>
+        </select>
+        <button onclick="getPollResults()">Get Results</button>
+        <div id="pollResults" class="results">No results available</div>
+    </div>
+
+    <script>
+        // Configuration
+        const publisherBaseUrl = 'http://localhost:8081/api';
+        const subscriberBaseUrl = 'http://localhost:8082/api';
+        
+        // Helper function to get current timestamp
+        function getCurrentTimestamp() {
+            return Date.now();
+        }
+        
+        // Helper function to handle API errors
+        function handleApiError(error, elementId) {
+            console.error('API Error:', error);
+            document.getElementById(elementId).innerHTML = `<div class="error">Error: ${error.message}</div>`;
+        }
+        
+        // Create a new topic (poll)
+        async function createTopic() {
+            const topicName = document.getElementById('newTopic').value.trim();
+            if (!topicName) {
+                document.getElementById('createTopicResult').innerHTML = '<div class="error">Please enter a poll name</div>';
+                return;
+            }
+            
+            try {
+                const timestamp = getCurrentTimestamp();
+                const response = await fetch(`${publisherBaseUrl}/create-topic?timestamp=${timestamp}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'text/plain'
+                    },
+                    body: topicName
+                });
+                
+                if (response.ok) {
+                    document.getElementById('createTopicResult').innerHTML = `Poll "${topicName}" created successfully!`;
+                    document.getElementById('newTopic').value = '';
+                    getTopics(); // Refresh the topics list
+                } else {
+                    throw new Error(`Failed to create poll: ${response.statusText}`);
+                }
+            } catch (error) {
+                handleApiError(error, 'createTopicResult');
+            }
+        }
+        
+        // Get all available topics (polls)
+        async function getTopics() {
+            try {
+                const timestamp = getCurrentTimestamp();
+                const response = await fetch(`${publisherBaseUrl}/topics?timestamp=${timestamp}`);
+                
+                if (response.ok) {
+                    const topics = await response.json();
+                    updateTopicsLists(topics);
+                } else {
+                    throw new Error(`Failed to get polls: ${response.statusText}`);
+                }
+            } catch (error) {
+                handleApiError(error, 'topicsList');
+            }
+        }
+        
+        // Update all topic select dropdowns
+        function updateTopicsLists(topics) {
+            // Update the topics list display
+            if (topics.length === 0) {
+                document.getElementById('topicsList').innerHTML = 'No polls available';
+            } else {
+                document.getElementById('topicsList').innerHTML = topics.map(topic => 
+                    `<div>${topic}</div>`
+                ).join('');
+            }
+            
+            // Update all select dropdowns
+            const selects = ['topicSelect', 'subscribeTopicSelect', 'resultsTopicSelect'];
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                // Save the current selection
+                const currentValue = select.value;
+                
+                // Clear options except the first one
+                while (select.options.length > 1) {
+                    select.remove(1);
+                }
+                
+                // Add new options
+                topics.forEach(topic => {
+                    const option = document.createElement('option');
+                    option.value = topic;
+                    option.text = topic;
+                    select.add(option);
+                });
+                
+                // Restore selection if it still exists
+                if (topics.includes(currentValue)) {
+                    select.value = currentValue;
+                }
+            });
+        }
+        
+        // Cast a vote (publish a message)
+        async function castVote() {
+            const topic = document.getElementById('topicSelect').value;
+            const vote = document.getElementById('voteOption').value.trim();
+            
+            if (!topic) {
+                document.getElementById('voteResult').innerHTML = '<div class="error">Please select a poll</div>';
+                return;
+            }
+            
+            if (!vote) {
+                document.getElementById('voteResult').innerHTML = '<div class="error">Please enter your vote</div>';
+                return;
+            }
+            
+            try {
+                const timestamp = getCurrentTimestamp();
+                const response = await fetch(`${publisherBaseUrl}/publish?topic=${encodeURIComponent(topic)}&timestamp=${timestamp}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'text/plain'
+                    },
+                    body: vote
+                });
+                
+                if (response.ok) {
+                    document.getElementById('voteResult').innerHTML = `Vote "${vote}" submitted for poll "${topic}"!`;
+                    document.getElementById('voteOption').value = '';
+                } else {
+                    throw new Error(`Failed to submit vote: ${response.statusText}`);
+                }
+            } catch (error) {
+                handleApiError(error, 'voteResult');
+            }
+        }
+        
+        // Subscribe to a poll
+        async function subscribeToPoll() {
+            const topic = document.getElementById('subscribeTopicSelect').value;
+            
+            if (!topic) {
+                document.getElementById('subscribeResult').innerHTML = '<div class="error">Please select a poll</div>';
+                return;
+            }
+            
+            try {
+                const timestamp = getCurrentTimestamp();
+                const response = await fetch(`${subscriberBaseUrl}/subscribe?timestamp=${timestamp}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'text/plain'
+                    },
+                    body: topic
+                });
+                
+                if (response.ok) {
+                    document.getElementById('subscribeResult').innerHTML = `Subscribed to poll "${topic}" successfully!`;
+                } else {
+                    throw new Error(`Failed to subscribe: ${response.statusText}`);
+                }
+            } catch (error) {
+                handleApiError(error, 'subscribeResult');
+            }
+        }
+        
+        // Get poll results (messages for a topic)
+        async function getPollResults() {
+            const topic = document.getElementById('resultsTopicSelect').value;
+            
+            if (!topic) {
+                document.getElementById('pollResults').innerHTML = '<div class="error">Please select a poll</div>';
+                return;
+            }
+            
+            try {
+                const timestamp = getCurrentTimestamp();
+                const response = await fetch(`${subscriberBaseUrl}/messages/${encodeURIComponent(topic)}?timestamp=${timestamp}`);
+                
+                if (response.ok) {
+                    const messages = await response.json();
+                    
+                    if (messages.length === 0) {
+                        document.getElementById('pollResults').innerHTML = 'No votes for this poll yet';
+                    } else {
+                        // Count votes
+                        const voteCounts = {};
+                        messages.forEach(vote => {
+                            voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+                        });
+                        
+                        // Display results
+                        const resultsHtml = Object.entries(voteCounts)
+                            .map(([option, count]) => `<div>${option}: ${count} vote(s)</div>`)
+                            .join('');
+                        
+                        document.getElementById('pollResults').innerHTML = `
+                            <h3>Results for "${topic}"</h3>
+                            <div>${resultsHtml}</div>
+                            <div>Total votes: ${messages.length}</div>
+                        `;
+                    }
+                } else {
+                    throw new Error(`Failed to get results: ${response.statusText}`);
+                }
+            } catch (error) {
+                handleApiError(error, 'pollResults');
+            }
+        }
+        
+        // Initialize the page
+        window.onload = function() {
+            getTopics();
+        };
+    </script>
+</body>
+</html> 
