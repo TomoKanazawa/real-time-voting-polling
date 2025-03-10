@@ -141,10 +141,18 @@
         async function getTopics() {
             try {
                 const timestamp = getCurrentTimestamp();
+                console.log(`Fetching topics from ${publisherBaseUrl}/topics?timestamp=${timestamp}`);
+                
+                // First, check the leader broker
+                const leaderResponse = await fetch(`${publisherBaseUrl}/leader-broker?timestamp=${timestamp}`);
+                const leaderBroker = await leaderResponse.text();
+                console.log(`Current leader broker: ${leaderBroker}`);
+                
                 const response = await fetch(`${publisherBaseUrl}/topics?timestamp=${timestamp}`);
                 
                 if (response.ok) {
                     const topics = await response.json();
+                    console.log(`Received topics: ${JSON.stringify(topics)}`);
                     updateTopicsLists(topics);
                 } else {
                     throw new Error(`Failed to get polls: ${response.statusText}`);

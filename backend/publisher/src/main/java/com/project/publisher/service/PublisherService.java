@@ -39,8 +39,27 @@ public class PublisherService {
         try {
             this.leaderBroker = restTemplate.getForObject(coordinatorUrl + "/api/leader?timestamp=" + logicalClock, String.class);
             System.out.println("Updated leader broker: " + leaderBroker);
+            // Sync topics after updating leader broker
+            syncTopics();
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    // New method to sync topics with the broker
+    @Scheduled(fixedRate = 3000)
+    public void syncTopics() {
+        incrementClock();
+        if (leaderBroker != null) {
+            try {
+                List<String> brokerTopics = restTemplate.getForObject(leaderBroker + "/api/topics?timestamp=" + logicalClock, List.class);
+                if (brokerTopics != null) {
+                    this.topics = brokerTopics;
+                    System.out.println("Synced topics from broker: " + topics);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -49,9 +68,8 @@ public class PublisherService {
         if (leaderBroker != null) {
             try {
                 restTemplate.postForObject(leaderBroker + "/api/add-topic?timestamp=" + logicalClock, topic, String.class);
-                if (!topics.contains(topic)) {
-                    topics.add(topic);
-                }
+                // Force a sync after creating a topic
+                syncTopics();
                 System.out.println("Created topic: " + topic);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -73,14 +91,23 @@ public class PublisherService {
 
     public List<String> getTopics() {
         incrementClock();
+        // First try to get topics from the broker
         if (leaderBroker != null) {
             try {
-                return restTemplate.getForObject(leaderBroker + "/api/topics?timestamp=" + logicalClock, List.class);
+                List<String> brokerTopics = restTemplate.getForObject(leaderBroker + "/api/topics?timestamp=" + logicalClock, List.class);
+                if (brokerTopics != null) {
+                    // Update our local cache
+                    this.topics = brokerTopics;
+                    return brokerTopics;
+                }
             } catch (Exception e) {
                 e.printStackTrace();
+                // If we can't reach the broker, fall back to our local cache
+                System.out.println("Failed to get topics from broker, using local cache");
             }
         }
-        return new ArrayList<>();
+        // Return our local cache if we couldn't get from broker
+        return new ArrayList<>(topics);
     }
 
     public String getCoordinatorUrl() {
