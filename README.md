@@ -4,140 +4,169 @@ A scalable, fault-tolerant, real-time voting and polling system built with Java 
 
 ## Project Overview
 
-This project implements a distributed voting system that can handle thousands of concurrent votes with minimal latency. It uses Apache Kafka for real-time messaging and implements leader election algorithms to ensure fault tolerance and consistency.
+This project implements a distributed voting system that can handle thousands of concurrent votes with minimal latency. It uses a publish-subscribe architecture with leader election, logical clocks, and data replication to ensure fault tolerance and consistency.
 
 ### Key Features
 
 - **Real-time vote processing**: Votes are processed and results are updated in real-time
 - **Fault tolerance**: The system can recover from node failures without losing data
 - **Scalability**: Designed to handle thousands of concurrent users
-- **Leader election**: Uses distributed consensus algorithms for leader election
-- **Secure voting**: Ensures vote integrity and prevents duplicate voting
+- **Leader election**: Uses the Bully Algorithm for leader election
+- **Logical clocks**: Implements Lamport Timestamps for event ordering
+- **Data replication**: Ensures consistency across all nodes
 
-## Architecture
+## How This Project Meets Requirements
+
+This project satisfies the distributed systems final project requirements by implementing:
+
+### 1. Distributed System Principles
+- **Scalability**: The system uses a distributed architecture with separate components (coordinator, broker, publisher, subscriber) that can scale independently.
+- **Fault Tolerance**: The system can recover from node failures through leader election and data replication.
+- **Consistency**: Lamport Timestamps ensure consistent event ordering across the system.
+
+### 2. Distributed Algorithms (4 implemented)
+- **Leader Election**: The Bully Algorithm is used to elect a leader broker when failures occur.
+- **Timestamps**: Lamport Logical Clocks maintain causal ordering of events across all components.
+- **Replication and Consistency Protocols**: Leader-follower replication ensures data consistency across brokers.
+- **Gossip Protocols**: Heartbeat mechanisms and state synchronization implement a form of gossip protocol.
+
+### 3. Architecture
+- **Publish-Subscribe Model**: Decouples publishers (voters) from subscribers (result viewers).
+- **Coordinator-Broker Architecture**: Provides centralized discovery with distributed processing.
+- **RESTful APIs**: Enables easy integration and communication between components.
+
+## System Architecture
 
 The system consists of the following components:
 
-- **Backend**: Java Spring Boot application that handles vote processing, leader election, and data persistence
-- **Frontend**: Next.js application that provides a user interface for creating polls and voting
-- **Kafka**: Message broker for real-time vote transmission and processing
-- **Database**: Stores poll data, votes, and user information
+- **Coordinator**: Manages broker registration and leader election
+- **Broker**: Handles message routing and storage
+- **Publisher**: Creates polls and publishes votes
+- **Subscriber**: Receives real-time poll results
+- **Frontend**: Provides a user interface for creating polls and voting
 
 ## Getting Started
 
 ### Prerequisites
 
 - Java 17 or higher
-- Node.js 18 or higher
-- Apache Kafka
-- Maven
+- Maven 3.6 or higher
+- Web browser (Chrome, Firefox, Safari, or Edge)
 
-### Running the Application
+### Running the Application Locally
 
-#### Backend Setup
-
-1. Navigate to the project root directory and then to the backend directory:
-   ```bash
-   cd real-time-voting-polling/backend
-   ```
-
-2. Build the application:
-   ```bash
-   mvn clean install
-   ```
-
-3. Run the application:
-   ```bash
-   mvn spring-boot:run
-   ```
-
-4. Verify the backend is running:
-   - The Spring Boot application should start on port 8080
-   - You should see logs indicating "Started BackendApplication in X seconds"
-   - You can test the health endpoint by visiting http://localhost:8080/api/health or running:
-     ```bash
-     curl http://localhost:8080/api/health
-     ```
-   - The H2 database console is available at http://localhost:8080/api/h2-console
-
-#### Frontend Setup
-
-1. Open a new terminal window and navigate to the frontend directory:
-   ```bash
-   cd real-time-voting-polling/frontend
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
-
-4. Verify the frontend is running:
-   - The Next.js application should start on port 3000
-   - You should see a message indicating "Local: http://localhost:3000"
-   - Open your browser and navigate to http://localhost:3000 to see the application
-
-#### Running Both Services Together
-
-For convenience, you can run both services in a single terminal using:
+#### 1. Clone the Repository
 
 ```bash
-# From the project root
-cd real-time-voting-polling/backend && mvn spring-boot:run &
-cd ../frontend && npm run dev &
+git clone https://github.com/yourusername/real-time-voting-polling.git
+cd real-time-voting-polling
 ```
 
-To stop both services, use:
+#### 2. Start the Coordinator Service
+
 ```bash
-pkill -f "spring-boot|next"
+cd backend/coordinator
+mvn spring-boot:run
 ```
 
-### Kafka Setup (Optional for Basic Testing)
+The coordinator will start on port 8080. You can verify it's running by visiting http://localhost:8080/api/health
 
-Note: For basic testing, Kafka is not required as the application can run with in-memory messaging.
+#### 3. Start the Broker Service
 
-1. Download and extract Apache Kafka
-2. Start the Zookeeper service:
-   ```bash
-   bin/zookeeper-server-start.sh config/zookeeper.properties
-   ```
+Open a new terminal window:
 
-3. Start the Kafka broker service:
-   ```bash
-   bin/kafka-server-start.sh config/server.properties
-   ```
+```bash
+cd backend/broker
+mvn spring-boot:run
+```
 
-### Troubleshooting
+The broker will start on port 8081. You can verify it's running by visiting http://localhost:8081/api/health
 
-- **Port conflicts**: If either service fails to start due to port conflicts, you can modify the ports:
-  - For backend: Edit `backend/src/main/resources/application.properties` and change `server.port`
-  - For frontend: Run with a custom port using `npm run dev -- -p 3001`
+#### 4. Start the Publisher Service
 
-- **Backend not starting**: Check Java version with `java -version` and ensure it's 17 or higher
+Open a new terminal window:
 
-- **Frontend not starting**: Check Node.js version with `node -v` and ensure it's 18 or higher
+```bash
+cd backend/publisher
+mvn spring-boot:run
+```
 
-## API Documentation
+The publisher will start on port 8082. You can verify it's running by visiting http://localhost:8082/api/health
 
-The backend provides the following RESTful APIs:
+#### 5. Start the Subscriber Service
 
-- `/api/auth`: Authentication endpoints
-- `/api/polls`: Poll management endpoints
-- `/api/votes`: Vote submission and retrieval endpoints
+Open a new terminal window:
 
-## Distributed Algorithms
+```bash
+cd backend/subscriber
+mvn spring-boot:run
+```
 
-This project implements the following distributed algorithms:
+The subscriber will start on port 8083. You can verify it's running by visiting http://localhost:8083/api/health
 
-1. **Leader Election**: Uses the Bully Algorithm for leader election
-2. **Consensus**: Implements a simplified version of the Raft consensus algorithm
-3. **Gossip Protocol**: For disseminating information across nodes
-4. **Distributed Snapshots**: For capturing the state of the distributed system
+#### 6. Open the Frontend
+
+Simply open the `frontend/index.html` file in your web browser. No server is needed for the frontend as it uses plain HTML, CSS, and JavaScript.
+
+### Testing the System
+
+1. Create a new poll using the "Create a New Poll" section
+2. Cast votes using the "Cast Your Vote" section
+3. Subscribe to poll results using the "Subscribe to Poll Results" section
+4. View results using the "Poll Results" section
+
+### Testing Fault Tolerance
+
+To test fault tolerance:
+
+1. Start all services as described above
+2. Create a poll and cast some votes
+3. Kill the broker service (Ctrl+C in its terminal)
+4. Observe in the coordinator logs that it detects the broker failure and elects a new leader
+5. Restart the broker service
+6. Verify that the system continues to function correctly
+
+## Distributed Algorithms Implementation
+
+### 1. Leader Election (Bully Algorithm)
+
+The coordinator service implements the Bully Algorithm for leader election:
+
+- When a broker joins, it registers with the coordinator
+- The coordinator designates one broker as the leader
+- If the leader fails (detected through missed heartbeats), the coordinator elects a new leader
+- All components regularly check with the coordinator to identify the current leader
+
+### 2. Timestamps (Lamport Logical Clocks)
+
+All components implement Lamport Timestamps:
+
+- Each component maintains its own logical clock
+- The clock is incremented with each operation
+- When receiving a message with a timestamp, the local clock is updated to max(local, received) + 1
+- Timestamps are passed with every API call to maintain causal ordering
+
+### 3. Replication and Consistency
+
+The system implements data replication through:
+
+- Regular synchronization between brokers and the leader
+- Publishers and subscribers maintain local caches that are regularly synchronized
+- The leader broker is the source of truth for all data
+
+### 4. Gossip Protocol
+
+The system implements aspects of a gossip protocol through:
+
+- Regular heartbeat messages from brokers to the coordinator
+- Periodic synchronization of state between components
+- Information dissemination through the leader to all followers
+
+## Troubleshooting
+
+- **Port conflicts**: If any service fails to start due to port conflicts, you can modify the port in the `application.properties` file in each service's resources directory
+- **Connection issues**: Ensure all services are running before using the frontend
+- **Data inconsistency**: If you notice inconsistent results, wait a few seconds for synchronization to complete
 
 ## Contributors
 
