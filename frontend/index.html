@@ -276,10 +276,24 @@
             
             try {
                 const timestamp = getCurrentTimestamp();
+                console.log(`Fetching poll results for topic "${topic}" from ${subscriberBaseUrl}/messages/${encodeURIComponent(topic)}?timestamp=${timestamp}`);
+                
+                // First, check subscribed topics
+                const subscribedResponse = await fetch(`${subscriberBaseUrl}/subscribed-topics?timestamp=${timestamp}`);
+                const subscribedTopics = await subscribedResponse.json();
+                console.log(`Subscribed topics: ${JSON.stringify(subscribedTopics)}`);
+                
+                // Check if we're subscribed to this topic
+                if (!subscribedTopics.includes(topic)) {
+                    console.log(`Not subscribed to topic "${topic}". Subscribing now...`);
+                    await subscribeToPoll(topic);
+                }
+                
                 const response = await fetch(`${subscriberBaseUrl}/messages/${encodeURIComponent(topic)}?timestamp=${timestamp}`);
                 
                 if (response.ok) {
                     const messages = await response.json();
+                    console.log(`Received messages for topic "${topic}": ${JSON.stringify(messages)}`);
                     
                     if (messages.length === 0) {
                         document.getElementById('pollResults').innerHTML = 'No votes for this poll yet';
@@ -306,6 +320,31 @@
                 }
             } catch (error) {
                 handleApiError(error, 'pollResults');
+            }
+        }
+        
+        // Helper function to subscribe to a topic programmatically
+        async function subscribeToPoll(topic) {
+            try {
+                const timestamp = getCurrentTimestamp();
+                const response = await fetch(`${subscriberBaseUrl}/subscribe?timestamp=${timestamp}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'text/plain'
+                    },
+                    body: topic
+                });
+                
+                if (response.ok) {
+                    console.log(`Subscribed to topic "${topic}" successfully`);
+                    return true;
+                } else {
+                    console.error(`Failed to subscribe to topic "${topic}": ${response.statusText}`);
+                    return false;
+                }
+            } catch (error) {
+                console.error(`Error subscribing to topic "${topic}":`, error);
+                return false;
             }
         }
         

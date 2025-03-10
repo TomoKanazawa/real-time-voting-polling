@@ -54,15 +54,41 @@ public class SubscriberService {
             for (String topic : subscribedTopics) {
                 try {
                     String subscriberUrl = "http://localhost:" + port;
-                    List<String> messages = restTemplate.getForObject(
-                            leaderBroker + "/api/messages?topic=" + topic + "&subscriberUrl=" + subscriberUrl + "&timestamp=" + logicalClock,
-                            List.class);
-                    topicMessages.put(topic, messages);
-                    System.out.println("Fetched messages for topic " + topic + ": " + messages);
+                    System.out.println("Fetching messages for topic: " + topic + " from broker: " + leaderBroker);
+                    
+                    // First check if we're registered as a subscriber for this topic
+                    try {
+                        restTemplate.postForObject(
+                            leaderBroker + "/api/add-subscriber?topic=" + topic + "&timestamp=" + logicalClock,
+                            subscriberUrl,
+                            String.class);
+                        System.out.println("Ensured subscription for topic: " + topic);
+                    } catch (Exception e) {
+                        System.out.println("Error ensuring subscription: " + e.getMessage());
+                    }
+                    
+                    // Then fetch messages
+                    try {
+                        List<String> messages = restTemplate.getForObject(
+                                leaderBroker + "/api/messages?topic=" + topic + "&subscriberUrl=" + subscriberUrl + "&timestamp=" + logicalClock,
+                                List.class);
+                        
+                        if (messages != null) {
+                            topicMessages.put(topic, messages);
+                            System.out.println("Fetched messages for topic " + topic + ": " + messages);
+                        } else {
+                            System.out.println("Received null messages for topic: " + topic);
+                        }
+                    } catch (Exception e) {
+                        System.out.println("Error fetching messages: " + e.getMessage());
+                        e.printStackTrace();
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
+        } else {
+            System.out.println("No leader broker available for fetching messages");
         }
     }
 
