@@ -71,16 +71,21 @@ mvn spring-boot:run
 
 The coordinator will start on port 8080. You can verify it's running by visiting http://localhost:8080/api/health
 
-#### 3. Start the Broker Service
+#### 3. Start Multiple Broker Services
 
-Open a new terminal window:
+Open new terminal windows to start multiple broker instances on different ports:
 
 ```bash
 cd backend/broker
+# Start the first broker on port 8081
 mvn spring-boot:run
+
+# Start additional brokers on different ports
+mvn spring-boot:run -Dspring-boot.run.arguments=--server.port=8085
+mvn spring-boot:run -Dspring-boot.run.arguments=--server.port=8086
 ```
 
-The broker will start on port 8081. You can verify it's running by visiting http://localhost:8081/api/health
+You can verify each broker is running by visiting their respective health endpoints (e.g., http://localhost:8081/api/health)
 
 #### 4. Start the Publisher Service
 
@@ -104,9 +109,17 @@ mvn spring-boot:run
 
 The subscriber will start on port 8083. You can verify it's running by visiting http://localhost:8083/api/health
 
-#### 6. Open the Frontend
+#### 6. Start the Frontend
 
-Simply open the `frontend/index.html` file in your web browser. No server is needed for the frontend as it uses plain HTML, CSS, and JavaScript.
+Open a new terminal window:
+
+```bash
+cd frontend
+# Start a simple HTTP server on port 3000
+python -m http.server 3000
+```
+
+Then open your browser and navigate to http://localhost:3000 to access the application.
 
 ### Testing the System
 
@@ -119,12 +132,12 @@ Simply open the `frontend/index.html` file in your web browser. No server is nee
 
 To test fault tolerance:
 
-1. Start all services as described above
+1. Start all services as described above (coordinator, multiple brokers, publisher, subscriber, and frontend)
 2. Create a poll and cast some votes
-3. Kill the broker service (Ctrl+C in its terminal)
-4. Observe in the coordinator logs that it detects the broker failure and elects a new leader
-5. Restart the broker service
-6. Verify that the system continues to function correctly
+3. Kill one of the broker services (Ctrl+C in its terminal)
+4. Observe in the coordinator logs that it detects the broker failure and elects a new leader from the remaining brokers
+5. Verify that the system continues to function correctly without interruption
+6. You can restart the killed broker to see it rejoin the system
 
 ## Distributed Algorithms Implementation
 

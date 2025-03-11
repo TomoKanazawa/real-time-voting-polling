@@ -68,18 +68,12 @@
         <select id="topicSelect">
             <option value="">Select a poll</option>
         </select>
-        <input type="text" id="voteOption" placeholder="Enter your vote">
+        <div style="margin-bottom: 10px;">
+            <input type="text" id="voterName" placeholder="Enter your name" style="margin-bottom: 10px;">
+            <input type="text" id="voteOption" placeholder="Enter your vote">
+        </div>
         <button onclick="castVote()">Submit Vote</button>
         <div id="voteResult" class="results"></div>
-    </div>
-    
-    <div class="section">
-        <h2>Subscribe to Poll Results</h2>
-        <select id="subscribeTopicSelect">
-            <option value="">Select a poll</option>
-        </select>
-        <button onclick="subscribeToPoll()">Subscribe</button>
-        <div id="subscribeResult" class="results"></div>
     </div>
     
     <div class="section">
@@ -174,7 +168,7 @@
             }
             
             // Update all select dropdowns
-            const selects = ['topicSelect', 'subscribeTopicSelect', 'resultsTopicSelect'];
+            const selects = ['topicSelect', 'resultsTopicSelect'];
             selects.forEach(selectId => {
                 const select = document.getElementById(selectId);
                 // Save the current selection
@@ -204,9 +198,15 @@
         async function castVote() {
             const topic = document.getElementById('topicSelect').value;
             const vote = document.getElementById('voteOption').value.trim();
+            const name = document.getElementById('voterName').value.trim();
             
             if (!topic) {
                 document.getElementById('voteResult').innerHTML = '<div class="error">Please select a poll</div>';
+                return;
+            }
+            
+            if (!name) {
+                document.getElementById('voteResult').innerHTML = '<div class="error">Please enter your name</div>';
                 return;
             }
             
@@ -217,51 +217,28 @@
             
             try {
                 const timestamp = getCurrentTimestamp();
+                // Create a JSON object with name and vote
+                const voteData = JSON.stringify({
+                    name: name,
+                    vote: vote
+                });
+                
                 const response = await fetch(`${publisherBaseUrl}/publish?topic=${encodeURIComponent(topic)}&timestamp=${timestamp}`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'text/plain'
+                        'Content-Type': 'application/json'
                     },
-                    body: vote
+                    body: voteData
                 });
                 
                 if (response.ok) {
-                    document.getElementById('voteResult').innerHTML = `Vote "${vote}" submitted for poll "${topic}"!`;
+                    document.getElementById('voteResult').innerHTML = `Vote "${vote}" from "${name}" submitted for poll "${topic}"!`;
                     document.getElementById('voteOption').value = '';
                 } else {
                     throw new Error(`Failed to submit vote: ${response.statusText}`);
                 }
             } catch (error) {
                 handleApiError(error, 'voteResult');
-            }
-        }
-        
-        // Subscribe to a poll
-        async function subscribeToPoll() {
-            const topic = document.getElementById('subscribeTopicSelect').value;
-            
-            if (!topic) {
-                document.getElementById('subscribeResult').innerHTML = '<div class="error">Please select a poll</div>';
-                return;
-            }
-            
-            try {
-                const timestamp = getCurrentTimestamp();
-                const response = await fetch(`${subscriberBaseUrl}/subscribe?timestamp=${timestamp}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'text/plain'
-                    },
-                    body: topic
-                });
-                
-                if (response.ok) {
-                    document.getElementById('subscribeResult').innerHTML = `Subscribed to poll "${topic}" successfully!`;
-                } else {
-                    throw new Error(`Failed to subscribe: ${response.statusText}`);
-                }
-            } catch (error) {
-                handleApiError(error, 'subscribeResult');
             }
         }
         
@@ -300,13 +277,38 @@
                     } else {
                         // Count votes
                         const voteCounts = {};
-                        messages.forEach(vote => {
+                        const votersByOption = {};
+                        
+                        messages.forEach(message => {
+                            let vote, name;
+                            
+                            try {
+                                // Try to parse as JSON
+                                const data = JSON.parse(message);
+                                vote = data.vote;
+                                name = data.name;
+                            } catch (e) {
+                                // If not JSON, treat the whole message as the vote (for backward compatibility)
+                                vote = message;
+                                name = "Anonymous";
+                            }
+                            
+                            // Count the vote
                             voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+                            
+                            // Add voter to the list
+                            if (!votersByOption[vote]) {
+                                votersByOption[vote] = [];
+                            }
+                            votersByOption[vote].push(name);
                         });
                         
                         // Display results
                         const resultsHtml = Object.entries(voteCounts)
-                            .map(([option, count]) => `<div>${option}: ${count} vote(s)</div>`)
+                            .map(([option, count]) => {
+                                const voters = votersByOption[option].join(', ');
+                                return `<div><strong>${option}</strong>: ${count} vote(s) - Voters: ${voters}</div>`;
+                            })
                             .join('');
                         
                         document.getElementById('pollResults').innerHTML = `
