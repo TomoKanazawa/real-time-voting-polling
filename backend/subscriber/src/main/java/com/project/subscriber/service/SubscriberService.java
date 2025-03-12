@@ -1,20 +1,31 @@
 package com.project.subscriber.service;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.ListTopicsResult;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.listener.MessageListenerContainer;
 
 import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class SubscriberService {
 
     private final RestTemplate restTemplate;
+    private final AdminClient adminClient;
+    private final KafkaListenerEndpointRegistry kafkaListenerRegistry;
 
     @Value("${coordinator.url}")
     private String coordinatorUrl;
@@ -24,16 +35,22 @@ public class SubscriberService {
 
     private String leaderBroker;
     private List<String> subscribedTopics = new ArrayList<>();
-    private Map<String, List<String>> topicMessages = new HashMap<>();
+    private Map<String, List<String>> topicMessages = new ConcurrentHashMap<>();
     private long logicalClock = 0;
 
-    public SubscriberService(RestTemplate restTemplate) {
+    public SubscriberService(RestTemplate restTemplate, 
+                            AdminClient adminClient,
+                            KafkaListenerEndpointRegistry kafkaListenerRegistry) {
         this.restTemplate = restTemplate;
+        this.adminClient = adminClient;
+        this.kafkaListenerRegistry = kafkaListenerRegistry;
     }
 
     @PostConstruct
     public void init() {
         updateLeaderBroker();
+        // Initialize the Kafka listener
+        System.out.println("Initializing Kafka listener for all topics");
     }
 
     @Scheduled(fixedRate = 5000)
@@ -47,97 +64,73 @@ public class SubscriberService {
         }
     }
 
-    @Scheduled(fixedRate = 2000)
-    public void fetchMessages() {
-        incrementClock();
-        if (leaderBroker != null) {
-            for (String topic : subscribedTopics) {
-                try {
-                    String subscriberUrl = "http://localhost:" + port;
-                    System.out.println("Fetching messages for topic: " + topic + " from broker: " + leaderBroker);
-                    
-                    // First check if we're registered as a subscriber for this topic
-                    try {
-                        restTemplate.postForObject(
-                            leaderBroker + "/api/add-subscriber?topic=" + topic + "&timestamp=" + logicalClock,
-                            subscriberUrl,
-                            String.class);
-                        System.out.println("Ensured subscription for topic: " + topic);
-                    } catch (Exception e) {
-                        System.out.println("Error ensuring subscription: " + e.getMessage());
-                    }
-                    
-                    // Then fetch messages
-                    try {
-                        List<String> messages = restTemplate.getForObject(
-                                leaderBroker + "/api/messages?topic=" + topic + "&subscriberUrl=" + subscriberUrl + "&timestamp=" + logicalClock,
-                                List.class);
-                        
-                        if (messages != null) {
-                            topicMessages.put(topic, messages);
-                            System.out.println("Fetched messages for topic " + topic + ": " + messages);
-                        } else {
-                            System.out.println("Received null messages for topic: " + topic);
-                        }
-                    } catch (Exception e) {
-                        System.out.println("Error fetching messages: " + e.getMessage());
-                        e.printStackTrace();
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        } else {
-            System.out.println("No leader broker available for fetching messages");
+    // Listen to all topics
+    @KafkaListener(id = "all-topics-listener", topicPattern = ".*")
+    public void listen(ConsumerRecord<String, String> record) {
+        String topic = record.topic();
+        String message = record.value();
+        
+        // Skip internal Kafka topics
+        if (topic.startsWith("__")) {
+            return;
+        }
+        
+        System.out.println("Received message from topic " + topic + ": " + message);
+        
+        // Store the message even if we haven't explicitly subscribed
+        // This ensures we capture all messages
+        topicMessages.computeIfAbsent(topic, k -> new ArrayList<>()).add(message);
+        
+        // If we receive a message for a topic we're not subscribed to,
+        // automatically add it to our subscribed topics
+        if (!subscribedTopics.contains(topic)) {
+            subscribedTopics.add(topic);
+            System.out.println("Auto-subscribed to topic: " + topic);
         }
     }
 
     public void subscribeTopic(String topic) {
         incrementClock();
-        if (leaderBroker != null && !subscribedTopics.contains(topic)) {
-            try {
-                String subscriberUrl = "http://localhost:" + port;
-                restTemplate.postForObject(
-                        leaderBroker + "/api/add-subscriber?topic=" + topic + "&timestamp=" + logicalClock,
-                        subscriberUrl,
-                        String.class);
-                subscribedTopics.add(topic);
-                topicMessages.put(topic, new ArrayList<>());
-                System.out.println("Subscribed to topic: " + topic);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        if (!subscribedTopics.contains(topic)) {
+            subscribedTopics.add(topic);
+            // Initialize the message list for this topic if it doesn't exist
+            topicMessages.putIfAbsent(topic, new ArrayList<>());
+            System.out.println("Subscribed to topic: " + topic);
         }
     }
 
     public void unsubscribeTopic(String topic) {
         incrementClock();
-        if (leaderBroker != null && subscribedTopics.contains(topic)) {
-            try {
-                String subscriberUrl = "http://localhost:" + port;
-                restTemplate.postForObject(
-                        leaderBroker + "/api/remove-subscriber?topic=" + topic + "&timestamp=" + logicalClock,
-                        subscriberUrl,
-                        String.class);
-                subscribedTopics.remove(topic);
-                topicMessages.remove(topic);
-                System.out.println("Unsubscribed from topic: " + topic);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        subscribedTopics.remove(topic);
+        System.out.println("Unsubscribed from topic: " + topic);
+    }
+
+    @Scheduled(fixedRate = 5000)
+    public void syncTopics() {
+        incrementClock();
+        try {
+            ListTopicsResult listTopicsResult = adminClient.listTopics();
+            Set<String> kafkaTopics = listTopicsResult.names().get();
+            // Remove internal Kafka topics
+            kafkaTopics.removeIf(topic -> topic.startsWith("__"));
+            System.out.println("Available Kafka topics: " + kafkaTopics);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
     public List<String> getTopics() {
         incrementClock();
-        if (leaderBroker != null) {
-            try {
-                return restTemplate.getForObject(leaderBroker + "/api/topics?timestamp=" + logicalClock, List.class);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        try {
+            ListTopicsResult listTopicsResult = adminClient.listTopics();
+            Set<String> kafkaTopics = listTopicsResult.names().get();
+            // Remove internal Kafka topics
+            kafkaTopics.removeIf(topic -> topic.startsWith("__"));
+            return new ArrayList<>(kafkaTopics);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ArrayList<>();
         }
-        return new ArrayList<>();
     }
 
     public List<String> getSubscribedTopics() {
@@ -152,6 +145,11 @@ public class SubscriberService {
 
     public List<String> getMessagesForTopic(String topic) {
         incrementClock();
+        // If we're asked for messages for a topic we're not subscribed to,
+        // automatically subscribe to it
+        if (!subscribedTopics.contains(topic)) {
+            subscribeTopic(topic);
+        }
         return topicMessages.getOrDefault(topic, new ArrayList<>());
     }
 

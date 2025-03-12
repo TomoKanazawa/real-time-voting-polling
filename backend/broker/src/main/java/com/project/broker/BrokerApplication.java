@@ -9,6 +9,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.springframework.kafka.core.ConsumerFactory;
 
 @SpringBootApplication
 @EnableScheduling
@@ -34,8 +37,11 @@ public class BrokerApplication {
 	}
 
 	@Bean
-	public BrokerService brokerService(RestTemplate restTemplate) {
-		BrokerService brokerService = new BrokerService(restTemplate);
+	public BrokerService brokerService(RestTemplate restTemplate, 
+									  KafkaTemplate<String, String> kafkaTemplate,
+									  AdminClient adminClient,
+									  ConsumerFactory<String, String> consumerFactory) {
+		BrokerService brokerService = new BrokerService(restTemplate, kafkaTemplate, adminClient, consumerFactory);
 		brokerService.setPort(port);
 		return brokerService;
 	}

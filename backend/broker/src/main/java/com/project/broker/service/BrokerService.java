@@ -1,9 +1,19 @@
 package com.project.broker.service;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.MessageListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.listener.ContainerProperties;
+import org.springframework.kafka.listener.KafkaMessageListenerContainer;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.ListTopicsResult;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import jakarta.annotation.PostConstruct;
 import java.util.*;
@@ -16,6 +26,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class BrokerService {
 
     private final RestTemplate restTemplate;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final AdminClient adminClient;
+    private final ConsumerFactory<String, String> consumerFactory;
 
     @Value("${coordinator.url}")
     private String coordinatorUrl;
@@ -32,8 +45,14 @@ public class BrokerService {
     private final AtomicBoolean readyToReceiveMessages = new AtomicBoolean(false);
     private final AtomicBoolean heartbeatStarted = new AtomicBoolean(false);
 
-    public BrokerService(RestTemplate restTemplate) {
+    public BrokerService(RestTemplate restTemplate, 
+                         KafkaTemplate<String, String> kafkaTemplate,
+                         AdminClient adminClient,
+                         ConsumerFactory<String, String> consumerFactory) {
         this.restTemplate = restTemplate;
+        this.kafkaTemplate = kafkaTemplate;
+        this.adminClient = adminClient;
+        this.consumerFactory = consumerFactory;
     }
 
     @PostConstruct
@@ -196,13 +215,26 @@ public class BrokerService {
 
     public void addTopic(String topic) {
         incrementClock();
-        topics.add(topic);
+        try {
+            // Create a new Kafka topic
+            NewTopic newTopic = new NewTopic(topic, 1, (short) 1);
+            adminClient.createTopics(Collections.singleton(newTopic));
+            topics.add(topic);
+            System.out.println("Created Kafka topic: " + topic);
+        } catch (Exception e) {
+            System.out.println("Error creating Kafka topic: " + e.getMessage());
+        }
     }
 
     public void addMessage(String topic, String message) {
         incrementClock();
-        messages.computeIfAbsent(topic, k -> new ArrayList<>()).add(message);
-        System.out.println("Message added to topic " + topic + ": " + message);
+        try {
+            // Send message to Kafka topic
+            kafkaTemplate.send(topic, message);
+            System.out.println("Message sent to Kafka topic " + topic + ": " + message);
+        } catch (Exception e) {
+            System.out.println("Error sending message to Kafka: " + e.getMessage());
+        }
     }
 
     public List<String> getSubscribers() {
@@ -259,6 +291,21 @@ public class BrokerService {
         data.put("messages", new HashMap<>(messages));
         data.put("subscribers", new HashMap<>(subscribers));
         return data;
+    }
+
+    @Scheduled(fixedRate = 5000)
+    public void syncTopicsWithKafka() {
+        incrementClock();
+        try {
+            ListTopicsResult listTopicsResult = adminClient.listTopics();
+            Set<String> kafkaTopics = listTopicsResult.names().get();
+            // Remove internal Kafka topics
+            kafkaTopics.removeIf(topic -> topic.startsWith("__"));
+            this.topics = new HashSet<>(kafkaTopics);
+            System.out.println("Synced topics with Kafka: " + topics);
+        } catch (Exception e) {
+            System.out.println("Error syncing topics with Kafka: " + e.getMessage());
+        }
     }
 
     private synchronized void incrementClock() {

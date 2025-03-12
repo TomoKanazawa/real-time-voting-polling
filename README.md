@@ -40,10 +40,26 @@ This project satisfies the distributed systems final project requirements by imp
 The system consists of the following components:
 
 - **Coordinator**: Manages broker registration and leader election
-- **Broker**: Handles message routing and storage
-- **Publisher**: Creates polls and publishes votes
-- **Subscriber**: Receives real-time poll results
+- **Broker**: Integrates with Kafka for message routing and storage
+- **Publisher**: Creates polls and publishes votes to Kafka topics
+- **Subscriber**: Receives real-time poll results from Kafka topics
 - **Frontend**: Provides a user interface for creating polls and voting
+- **Kafka**: Provides the messaging backbone for the entire system
+
+### Kafka Integration
+
+The system uses Apache Kafka as the messaging backbone:
+
+- **Topics**: Each poll is represented as a Kafka topic
+- **Publishers**: Send votes as messages to Kafka topics
+- **Subscribers**: Consume messages from Kafka topics to display results
+- **Brokers**: Manage Kafka topics and handle message routing
+
+This architecture provides:
+- **Scalability**: Kafka can handle high throughput of messages
+- **Durability**: Messages are persisted and replicated
+- **Fault Tolerance**: Kafka's distributed nature ensures the system can recover from failures
+- **Real-time Processing**: Messages are delivered with low latency
 
 ## Getting Started
 
@@ -51,6 +67,7 @@ The system consists of the following components:
 
 - Java 17 or higher
 - Maven 3.6 or higher
+- Apache Kafka 3.x (or Docker and Docker Compose)
 - Web browser (Chrome, Firefox, Safari, or Edge)
 
 ### Running the Application Locally
@@ -62,7 +79,32 @@ git clone https://github.com/yourusername/real-time-voting-polling.git
 cd real-time-voting-polling
 ```
 
-#### 2. Start the Coordinator Service
+#### 2. Start Kafka
+
+You can start Kafka using either Docker Compose (recommended) or manually.
+
+**Option 1: Using Docker Compose (Recommended)**
+
+```bash
+# Start Kafka and Zookeeper using Docker Compose
+docker-compose up -d
+
+# You can access the Kafka UI at http://localhost:8090
+```
+
+**Option 2: Manual Kafka Setup**
+
+If you prefer to run Kafka manually:
+
+```bash
+# Start Zookeeper
+bin/zookeeper-server-start.sh config/zookeeper.properties
+
+# In a new terminal, start Kafka
+bin/kafka-server-start.sh config/server.properties
+```
+
+#### 3. Start the Coordinator Service
 
 ```bash
 cd backend/coordinator
@@ -161,11 +203,19 @@ All components implement Lamport Timestamps:
 
 ### 3. Replication and Consistency
 
-The system implements data replication through:
+The system implements data replication through Apache Kafka:
 
-- Regular synchronization between brokers and the leader
-- Publishers and subscribers maintain local caches that are regularly synchronized
-- The leader broker is the source of truth for all data
+- **Topic Replication**: Kafka topics can be configured with a replication factor to ensure data is replicated across multiple brokers
+- **Partition Leadership**: Each Kafka partition has a leader that handles all reads and writes, with followers that replicate the data
+- **Consistency Guarantees**: Kafka provides at-least-once delivery semantics, ensuring messages are not lost
+- **Offset Management**: Consumers track their position in each partition using offsets, allowing them to resume from where they left off
+- **Producer Acknowledgments**: Producers can be configured to wait for acknowledgments from the leader or all replicas before considering a write successful
+
+This approach ensures:
+- High availability of data
+- Fault tolerance against broker failures
+- Consistent message ordering within partitions
+- Scalable throughput by adding more partitions
 
 ### 4. Gossip Protocol
 

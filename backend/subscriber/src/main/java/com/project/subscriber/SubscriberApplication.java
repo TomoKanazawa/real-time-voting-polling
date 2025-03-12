@@ -9,6 +9,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestTemplate;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 
 @SpringBootApplication
 @EnableScheduling
@@ -33,8 +35,10 @@ public class SubscriberApplication {
 	}
 
 	@Bean
-	public SubscriberService subscriberService(RestTemplate restTemplate) {
-		SubscriberService subscriberService = new SubscriberService(restTemplate);
+	public SubscriberService subscriberService(RestTemplate restTemplate,
+											 AdminClient adminClient,
+											 KafkaListenerEndpointRegistry kafkaListenerRegistry) {
+		SubscriberService subscriberService = new SubscriberService(restTemplate, adminClient, kafkaListenerRegistry);
 		subscriberService.setPort(port);
 		return subscriberService;
 	}

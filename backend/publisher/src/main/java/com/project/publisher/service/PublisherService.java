@@ -1,18 +1,28 @@
 package com.project.publisher.service;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.ListTopicsResult;
+import org.apache.kafka.clients.admin.NewTopic;
 
 import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
 
 @Service
 public class PublisherService {
 
     private final RestTemplate restTemplate;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final AdminClient adminClient;
 
     @Value("${coordinator.url}")
     private String coordinatorUrl;
@@ -24,13 +34,18 @@ public class PublisherService {
     private List<String> topics = new ArrayList<>();
     private long logicalClock = 0;
 
-    public PublisherService(RestTemplate restTemplate) {
+    public PublisherService(RestTemplate restTemplate, 
+                           KafkaTemplate<String, String> kafkaTemplate,
+                           AdminClient adminClient) {
         this.restTemplate = restTemplate;
+        this.kafkaTemplate = kafkaTemplate;
+        this.adminClient = adminClient;
     }
 
     @PostConstruct
     public void init() {
         updateLeaderBroker();
+        syncTopics();
     }
 
     @Scheduled(fixedRate = 5000)
@@ -39,74 +54,54 @@ public class PublisherService {
         try {
             this.leaderBroker = restTemplate.getForObject(coordinatorUrl + "/api/leader?timestamp=" + logicalClock, String.class);
             System.out.println("Updated leader broker: " + leaderBroker);
-            // Sync topics after updating leader broker
-            syncTopics();
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    // New method to sync topics with the broker
     @Scheduled(fixedRate = 3000)
     public void syncTopics() {
         incrementClock();
-        if (leaderBroker != null) {
-            try {
-                List<String> brokerTopics = restTemplate.getForObject(leaderBroker + "/api/topics?timestamp=" + logicalClock, List.class);
-                if (brokerTopics != null) {
-                    this.topics = brokerTopics;
-                    System.out.println("Synced topics from broker: " + topics);
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        try {
+            ListTopicsResult listTopicsResult = adminClient.listTopics();
+            Set<String> kafkaTopics = listTopicsResult.names().get();
+            // Remove internal Kafka topics
+            kafkaTopics.removeIf(topic -> topic.startsWith("__"));
+            this.topics = new ArrayList<>(kafkaTopics);
+            System.out.println("Synced topics with Kafka: " + topics);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
     public void createTopic(String topic) {
         incrementClock();
-        if (leaderBroker != null) {
-            try {
-                restTemplate.postForObject(leaderBroker + "/api/add-topic?timestamp=" + logicalClock, topic, String.class);
-                // Force a sync after creating a topic
-                syncTopics();
-                System.out.println("Created topic: " + topic);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        try {
+            // Create a new Kafka topic
+            NewTopic newTopic = new NewTopic(topic, 1, (short) 1);
+            adminClient.createTopics(Collections.singleton(newTopic)).all().get();
+            // Force a sync after creating a topic
+            syncTopics();
+            System.out.println("Created Kafka topic: " + topic);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
     public void publishMessage(String topic, String message) {
         incrementClock();
-        if (leaderBroker != null) {
-            try {
-                restTemplate.postForObject(leaderBroker + "/api/add-message?topic=" + topic + "&timestamp=" + logicalClock, message, String.class);
-                System.out.println("Published message to topic " + topic + ": " + message);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        try {
+            // Send message to Kafka topic
+            kafkaTemplate.send(topic, message);
+            System.out.println("Published message to Kafka topic " + topic + ": " + message);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
     public List<String> getTopics() {
         incrementClock();
-        // First try to get topics from the broker
-        if (leaderBroker != null) {
-            try {
-                List<String> brokerTopics = restTemplate.getForObject(leaderBroker + "/api/topics?timestamp=" + logicalClock, List.class);
-                if (brokerTopics != null) {
-                    // Update our local cache
-                    this.topics = brokerTopics;
-                    return brokerTopics;
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-                // If we can't reach the broker, fall back to our local cache
-                System.out.println("Failed to get topics from broker, using local cache");
-            }
-        }
-        // Return our local cache if we couldn't get from broker
+        // Return the cached topics list
         return new ArrayList<>(topics);
     }
 

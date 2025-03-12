@@ -9,6 +9,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.apache.kafka.clients.admin.AdminClient;
 
 @SpringBootApplication
 @EnableScheduling
@@ -33,8 +35,10 @@ public class PublisherApplication {
 	}
 
 	@Bean
-	public PublisherService publisherService(RestTemplate restTemplate) {
-		PublisherService publisherService = new PublisherService(restTemplate);
+	public PublisherService publisherService(RestTemplate restTemplate, 
+										   KafkaTemplate<String, String> kafkaTemplate,
+										   AdminClient adminClient) {
+		PublisherService publisherService = new PublisherService(restTemplate, kafkaTemplate, adminClient);
 		publisherService.setPort(port);
 		return publisherService;
 	}
