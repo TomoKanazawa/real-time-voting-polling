@@ -45,50 +45,160 @@
             color: red;
             margin-top: 10px;
         }
+        .success {
+            color: green;
+            margin-top: 10px;
+        }
+        #loginSection {
+            text-align: center;
+            margin: 50px auto;
+            max-width: 400px;
+            padding: 30px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #loginSection input {
+            width: 100%;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+        #loginSection button {
+            width: 100%;
+        }
+        #mainContent {
+            display: none;
+        }
+        .password-hint {
+            font-style: italic;
+            color: #666;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        .logout-btn {
+            float: right;
+            background-color: #f44336;
+        }
+        .logout-btn:hover {
+            background-color: #d32f2f;
+        }
+        .user-info {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f0f8ff;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
-    <h1>Real-Time Voting and Polling</h1>
-    
-    <div class="section">
-        <h2>Create a New Poll</h2>
-        <input type="text" id="newTopic" placeholder="Enter poll name">
-        <button onclick="createTopic()">Create Poll</button>
-        <div id="createTopicResult" class="results"></div>
-    </div>
-    
-    <div class="section">
-        <h2>Available Polls</h2>
-        <button onclick="getTopics()">Refresh Polls</button>
-        <div id="topicsList" class="results">No polls available</div>
-    </div>
-    
-    <div class="section">
-        <h2>Cast Your Vote</h2>
-        <select id="topicSelect">
-            <option value="">Select a poll</option>
-        </select>
-        <div style="margin-bottom: 10px;">
-            <input type="text" id="voterName" placeholder="Enter your name" style="margin-bottom: 10px;">
-            <input type="text" id="voteOption" placeholder="Enter your vote">
+    <div id="loginSection">
+        <h1>Login</h1>
+        <div>
+            <input type="text" id="username" placeholder="Enter your username">
+            <input type="password" id="password" placeholder="Enter your password">
+            <button onclick="login()">Login</button>
+            <div id="loginResult"></div>
+            <p class="password-hint">Hint: The password is "test" for all users</p>
         </div>
-        <button onclick="castVote()">Submit Vote</button>
-        <div id="voteResult" class="results"></div>
     </div>
-    
-    <div class="section">
-        <h2>Poll Results</h2>
-        <select id="resultsTopicSelect">
-            <option value="">Select a poll</option>
-        </select>
-        <button onclick="getPollResults()">Get Results</button>
-        <div id="pollResults" class="results">No results available</div>
+
+    <div id="mainContent">
+        <div class="user-info">
+            <span id="welcomeMessage">Welcome, User!</span>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+        
+        <h1>Real-Time Voting and Polling</h1>
+        
+        <div class="section">
+            <h2>Create a New Poll</h2>
+            <input type="text" id="newTopic" placeholder="Enter poll name">
+            <button onclick="createTopic()">Create Poll</button>
+            <div id="createTopicResult" class="results"></div>
+        </div>
+        
+        <div class="section">
+            <h2>Available Polls</h2>
+            <button onclick="getTopics()">Refresh Polls</button>
+            <div id="topicsList" class="results">No polls available</div>
+        </div>
+        
+        <div class="section">
+            <h2>Cast Your Vote</h2>
+            <select id="topicSelect">
+                <option value="">Select a poll</option>
+            </select>
+            <div style="margin-bottom: 10px;">
+                <input type="text" id="voterName" placeholder="Enter your name" style="margin-bottom: 10px;">
+                <input type="text" id="voteOption" placeholder="Enter your vote">
+            </div>
+            <button onclick="castVote()">Submit Vote</button>
+            <div id="voteResult" class="results"></div>
+        </div>
+        
+        <div class="section">
+            <h2>Poll Results</h2>
+            <select id="resultsTopicSelect">
+                <option value="">Select a poll</option>
+            </select>
+            <button onclick="getPollResults()">Get Results</button>
+            <div id="pollResults" class="results">No results available</div>
+        </div>
     </div>
 
     <script>
         // Configuration
         const publisherBaseUrl = 'http://localhost:8081/api';
         const subscriberBaseUrl = 'http://localhost:8082/api';
+        
+        // Login functionality
+        function login() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            
+            if (!username) {
+                document.getElementById('loginResult').innerHTML = '<div class="error">Please enter a username</div>';
+                return;
+            }
+            
+            if (password === 'test') {
+                // Store username in session storage
+                sessionStorage.setItem('username', username);
+                sessionStorage.setItem('isLoggedIn', 'true');
+                
+                // Update welcome message
+                document.getElementById('welcomeMessage').textContent = `Welcome, ${username}!`;
+                
+                // Pre-fill voter name field with the username
+                document.getElementById('voterName').value = username;
+                
+                // Show main content and hide login section
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                
+                // Initialize the page
+                getTopics();
+            } else {
+                document.getElementById('loginResult').innerHTML = '<div class="error">Incorrect password. Remember, the password is "test"</div>';
+            }
+        }
+        
+        function logout() {
+            // Clear session storage
+            sessionStorage.removeItem('username');
+            sessionStorage.removeItem('isLoggedIn');
+            
+            // Show login section and hide main content
+            document.getElementById('loginSection').style.display = 'block';
+            document.getElementById('mainContent').style.display = 'none';
+            
+            // Clear password field
+            document.getElementById('password').value = '';
+            document.getElementById('loginResult').innerHTML = '';
+        }
         
         // Helper function to get current timestamp
         function getCurrentTimestamp() {
@@ -350,10 +460,39 @@
             }
         }
         
-        // Initialize the page
+        // Check if user is already logged in (from a previous session)
         window.onload = function() {
-            getTopics();
+            const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
+            const username = sessionStorage.getItem('username');
+            
+            if (isLoggedIn && username) {
+                // Update welcome message
+                document.getElementById('welcomeMessage').textContent = `Welcome, ${username}!`;
+                
+                // Pre-fill voter name field with the username
+                document.getElementById('voterName').value = username;
+                
+                // Show main content and hide login section
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                
+                // Initialize the page
+                getTopics();
+            }
         };
+        
+        // Add event listener for Enter key on login inputs
+        document.getElementById('username').addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                document.getElementById('password').focus();
+            }
+        });
+        
+        document.getElementById('password').addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                login();
+            }
+        });
     </script>
 </body>
 </html> 
