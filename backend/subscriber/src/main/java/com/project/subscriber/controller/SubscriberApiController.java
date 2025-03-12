@@ -45,6 +45,16 @@ public class SubscriberApiController {
         return messages;
     }
 
+    @GetMapping("/refresh-messages/{topic}")
+    public List<String> refreshMessagesForTopic(@PathVariable String topic, @RequestParam long timestamp) {
+        logger.info("Received REFRESH MESSAGES request for topic: {}, timestamp: {}", topic, timestamp);
+        subscriberService.updateClock(timestamp);
+        // Force a manual refresh of messages
+        List<String> messages = subscriberService.refreshMessagesForTopic(topic);
+        logger.info("Returning {} refreshed messages for topic: {}", messages.size(), topic);
+        return messages;
+    }
+
     @PostMapping("/subscribe")
     public void subscribeTopic(@RequestBody String topic, @RequestParam long timestamp) {
         subscriberService.updateClock(timestamp);

@@ -13,6 +13,14 @@ import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.listener.MessageListenerContainer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import java.time.Duration;
+import java.util.Collections;
+import java.util.Properties;
 
 import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
@@ -55,6 +63,8 @@ public class SubscriberService {
         updateLeaderBroker();
         // Initialize the Kafka listener
         logger.info("Initializing Kafka listener for all topics");
+        // Ensure we're subscribed to Poll3 from the start
+        subscribeTopic("Poll3");
     }
 
     @Scheduled(fixedRate = 5000)
@@ -80,6 +90,8 @@ public class SubscriberService {
         }
         
         logger.info("Received message from topic {}: {}", topic, message);
+        logger.info("Message details - Partition: {}, Offset: {}, Timestamp: {}", 
+                   record.partition(), record.offset(), record.timestamp());
         
         // Store the message even if we haven't explicitly subscribed
         // This ensures we capture all messages
@@ -90,6 +102,24 @@ public class SubscriberService {
         if (!subscribedTopics.contains(topic)) {
             subscribedTopics.add(topic);
             logger.info("Auto-subscribed to topic: {}", topic);
+        }
+    }
+
+    // Dedicated listener for Poll3
+    @KafkaListener(id = "poll3-listener", topics = "Poll3", groupId = "poll3-consumer")
+    public void listenToPoll3(ConsumerRecord<String, String> record) {
+        String message = record.value();
+        logger.info("POLL3 DEDICATED LISTENER - Received message: {}", message);
+        logger.info("POLL3 DEDICATED LISTENER - Message details - Partition: {}, Offset: {}, Timestamp: {}", 
+                   record.partition(), record.offset(), record.timestamp());
+        
+        // Store the message in the topicMessages map
+        topicMessages.computeIfAbsent("Poll3", k -> new ArrayList<>()).add(message);
+        
+        // Ensure we're subscribed to Poll3
+        if (!subscribedTopics.contains("Poll3")) {
+            subscribedTopics.add("Poll3");
+            logger.info("Auto-subscribed to Poll3 via dedicated listener");
         }
     }
 
@@ -161,11 +191,69 @@ public class SubscriberService {
         
         List<String> messages = topicMessages.getOrDefault(topic, new ArrayList<>());
         logger.info("Retrieved {} messages for topic: {}", messages.size(), topic);
-        if (messages.size() > 0) {
+        
+        // Add more detailed logging
+        if (messages.isEmpty()) {
+            logger.warn("No messages found for topic: {}. This could indicate a Kafka consumer issue.", topic);
+            // Try to check if the topic exists in Kafka
+            try {
+                Set<String> topics = adminClient.listTopics().names().get();
+                if (topics.contains(topic)) {
+                    logger.info("Topic {} exists in Kafka but no messages were retrieved", topic);
+                    // Try to manually fetch messages
+                    List<String> manuallyFetchedMessages = manuallyFetchMessagesFromKafka(topic);
+                    if (!manuallyFetchedMessages.isEmpty()) {
+                        logger.info("Manually fetched {} messages for topic {}", manuallyFetchedMessages.size(), topic);
+                        // Update our in-memory store
+                        topicMessages.put(topic, manuallyFetchedMessages);
+                        return manuallyFetchedMessages;
+                    }
+                } else {
+                    logger.warn("Topic {} does not exist in Kafka", topic);
+                }
+            } catch (Exception e) {
+                logger.error("Error checking if topic exists in Kafka", e);
+            }
+        } else {
             logger.debug("First message sample: {}", messages.get(0));
             if (messages.size() > 1) {
                 logger.debug("Last message sample: {}", messages.get(messages.size() - 1));
             }
+        }
+        
+        return messages;
+    }
+    
+    /**
+     * Manually fetch messages from Kafka for a specific topic
+     * This is a fallback method in case the regular Kafka listener isn't working
+     */
+    private List<String> manuallyFetchMessagesFromKafka(String topic) {
+        List<String> messages = new ArrayList<>();
+        Properties props = new Properties();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "manual-fetcher-" + System.currentTimeMillis());
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        
+        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
+            consumer.subscribe(Collections.singletonList(topic));
+            
+            // Poll for records
+            ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(5000));
+            
+            logger.info("Manually fetched {} records for topic {}", records.count(), topic);
+            
+            records.forEach(record -> {
+                logger.info("Manual fetch - Received message from topic {}: {}", record.topic(), record.value());
+                messages.add(record.value());
+            });
+            
+            // Commit offsets
+            consumer.commitSync();
+        } catch (Exception e) {
+            logger.error("Error manually fetching messages from Kafka", e);
         }
         
         return messages;
@@ -203,5 +291,32 @@ public class SubscriberService {
 
     public synchronized long getLogicalClock() {
         return logicalClock;
+    }
+
+    /**
+     * Force a refresh of messages for a specific topic by manually fetching from Kafka
+     */
+    public List<String> refreshMessagesForTopic(String topic) {
+        incrementClock();
+        logger.info("Forcing refresh of messages for topic: {}, logical clock: {}", topic, logicalClock);
+        
+        // Ensure we're subscribed to the topic
+        if (!subscribedTopics.contains(topic)) {
+            logger.info("Auto-subscribing to topic: {} during refresh", topic);
+            subscribeTopic(topic);
+        }
+        
+        // Manually fetch messages from Kafka
+        List<String> refreshedMessages = manuallyFetchMessagesFromKafka(topic);
+        
+        if (!refreshedMessages.isEmpty()) {
+            logger.info("Refreshed {} messages for topic {}", refreshedMessages.size(), topic);
+            // Update our in-memory store
+            topicMessages.put(topic, refreshedMessages);
+        } else {
+            logger.warn("No messages found during refresh for topic: {}", topic);
+        }
+        
+        return refreshedMessages;
     }
 } 
