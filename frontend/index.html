@@ -118,6 +118,7 @@
             <input type="text" id="newTopic" placeholder="Enter poll name">
             <button onclick="createTopic()">Create Poll</button>
             <div id="createTopicResult" class="results"></div>
+            <div class="password-hint">Spaces are allowed in poll names</div>
         </div>
         
         <div class="section">
@@ -216,6 +217,12 @@
             const topicName = document.getElementById('newTopic').value.trim();
             if (!topicName) {
                 document.getElementById('createTopicResult').innerHTML = '<div class="error">Please enter a poll name</div>';
+                return;
+            }
+            
+            // Validate that the topic name is not too long
+            if (topicName.length > 100) {
+                document.getElementById('createTopicResult').innerHTML = '<div class="error">Poll name is too long (maximum 100 characters)</div>';
                 return;
             }
             
