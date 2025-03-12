@@ -3,6 +3,8 @@ package com.project.subscriber.controller;
 import com.project.subscriber.service.SubscriberService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -10,6 +12,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 public class SubscriberApiController {
+
+    private static final Logger logger = LoggerFactory.getLogger(SubscriberApiController.class);
 
     @Autowired
     private SubscriberService subscriberService;
@@ -34,8 +38,11 @@ public class SubscriberApiController {
 
     @GetMapping("/messages/{topic}")
     public List<String> getMessagesForTopic(@PathVariable String topic, @RequestParam long timestamp) {
+        logger.info("Received GET RESULTS request for topic: {}, timestamp: {}", topic, timestamp);
         subscriberService.updateClock(timestamp);
-        return subscriberService.getMessagesForTopic(topic);
+        List<String> messages = subscriberService.getMessagesForTopic(topic);
+        logger.info("Returning {} messages for topic: {}", messages.size(), topic);
+        return messages;
     }
 
     @PostMapping("/subscribe")

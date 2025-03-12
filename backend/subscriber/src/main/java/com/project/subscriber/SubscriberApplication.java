@@ -11,10 +11,14 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestTemplate;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SpringBootApplication
 @EnableScheduling
 public class SubscriberApplication {
+
+	private static final Logger logger = LoggerFactory.getLogger(SubscriberApplication.class);
 
 	@Value("${server.port}")
 	private int port;
@@ -31,7 +35,7 @@ public class SubscriberApplication {
 	@EventListener
 	public void onWebServerInitialized(WebServerInitializedEvent event) {
 		this.port = event.getWebServer().getPort();
-		System.out.println("Started application on port: " + port);
+		logger.info("Started application on port: {}", port);
 	}
 
 	@Bean
