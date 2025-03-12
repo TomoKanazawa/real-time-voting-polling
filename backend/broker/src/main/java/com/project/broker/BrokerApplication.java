@@ -30,6 +30,7 @@ public class BrokerApplication {
 	public void onWebServerInitialized(WebServerInitializedEvent event) {
 		this.port = event.getWebServer().getPort();
 		System.out.println("Started application on port: " + port);
+		System.out.println("This broker's URL: http://localhost:" + port);
 	}
 
 	@Bean

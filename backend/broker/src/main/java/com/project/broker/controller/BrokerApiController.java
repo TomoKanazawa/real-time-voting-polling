@@ -85,4 +85,21 @@ public class BrokerApiController {
         brokerService.updateClock(timestamp);
         return brokerService.getSubscribersWithTopics();
     }
+    
+    /**
+     * Endpoint to handle leader-changed notifications from the coordinator
+     * This is part of the Bully Algorithm implementation
+     */
+    @PostMapping("/leader-changed")
+    public void leaderChanged(@RequestBody String newLeader, @RequestParam long timestamp) {
+        brokerService.updateClock(timestamp);
+        
+        // Check if the broker is ready to receive messages
+        if (!brokerService.isReadyToReceiveMessages()) {
+            System.out.println("WARNING: Received leader-changed notification before broker was ready. Will process anyway.");
+        }
+        
+        brokerService.setLeader(newLeader);
+        System.out.println("Received leader-changed notification. New leader: " + newLeader);
+    }
 } 

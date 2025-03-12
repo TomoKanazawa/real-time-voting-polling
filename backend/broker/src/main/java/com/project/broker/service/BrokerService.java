@@ -7,6 +7,10 @@ import org.springframework.web.client.RestTemplate;
 
 import jakarta.annotation.PostConstruct;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 public class BrokerService {
@@ -25,6 +29,8 @@ public class BrokerService {
     private Map<String, List<String>> messages = new HashMap<>();
     private Map<String, List<String>> subscribers = new HashMap<>();
     private long logicalClock = 0;
+    private final AtomicBoolean readyToReceiveMessages = new AtomicBoolean(false);
+    private final AtomicBoolean heartbeatStarted = new AtomicBoolean(false);
 
     public BrokerService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
@@ -32,10 +38,52 @@ public class BrokerService {
 
     @PostConstruct
     public void init() {
-        registerBroker();
-        updateLeaderAndBrokers();
+        // Mark as ready to receive messages first
+        readyToReceiveMessages.set(true);
+        System.out.println("Broker is now ready to receive messages");
+        
+        // Wait 3 seconds before starting heartbeats to ensure full initialization
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.schedule(() -> {
+            System.out.println("Starting broker registration and heartbeat after delay");
+            registerBroker();
+            updateLeaderAndBrokers();
+            heartbeatStarted.set(true);
+            scheduler.shutdown();
+        }, 3, TimeUnit.SECONDS);
     }
 
+    /**
+     * Sets the port for this broker
+     * @param port the port number
+     */
+    public void setPort(int port) {
+        this.port = port;
+    }
+
+    /**
+     * Sets the leader broker
+     * This is called when the coordinator notifies this broker about a leader change
+     * @param newLeader the URL of the new leader broker
+     */
+    public void setLeader(String newLeader) {
+        this.leader = newLeader;
+        System.out.println("Leader updated to: " + newLeader);
+        
+        // If this broker is the new leader, log it
+        String thisUrl = "http://localhost:" + port;
+        if (thisUrl.equals(newLeader)) {
+            System.out.println("THIS BROKER IS NOW THE LEADER!");
+        }
+    }
+
+    /**
+     * Checks if the broker is ready to receive messages
+     * @return true if the broker is ready, false otherwise
+     */
+    public boolean isReadyToReceiveMessages() {
+        return readyToReceiveMessages.get();
+    }
 
     public boolean isSubscriberAlive(String subscriberUrl) {
         try {
@@ -53,6 +101,11 @@ public class BrokerService {
 
     @Scheduled(fixedRate = 1000)
     public void sendHeartbeat() {
+        // Only send heartbeats if the broker is ready and heartbeat has been started
+        if (!readyToReceiveMessages.get() || !heartbeatStarted.get()) {
+            return;
+        }
+        
         incrementClock();
         System.out.println("Sending heart beat: " + new Date());
         try {
@@ -171,10 +224,6 @@ public class BrokerService {
 
     public int getPort() {
         return port;
-    }
-
-    public void setPort(int port) {
-        this.port = port;
     }
 
     public void logNewPublisherContact(String publisherUrl) {
